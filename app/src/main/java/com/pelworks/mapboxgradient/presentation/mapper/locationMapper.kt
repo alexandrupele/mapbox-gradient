@@ -5,6 +5,7 @@ import com.pelworks.mapboxgradient.domain.model.Location
 import com.pelworks.mapboxgradient.presentation.model.GradientStop
 import com.pelworks.mapboxgradient.presentation.model.MapState
 import com.pelworks.mapboxgradient.presentation.model.MercatorPoint
+import com.pelworks.mapboxgradient.presentation.model.RgbColor
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.hypot
@@ -15,47 +16,42 @@ fun List<Location>.toMapState(): MapState {
     val points = map { Point.fromLngLat(it.lon, it.lat) }
     return MapState(
         points = points,
-        gradientStops = computeMercatorGradientStops(
+        gradientStops = computeGradientStops(
             points = points,
-            colors = map { it.toSpeedColor() }
+            pointColors = map { it.toSpeedColor().toRgb() }
         )
     )
 }
 
-fun computeMercatorGradientStops(
+/**
+ * Uses Mercator projection to compute line progress (percentage)
+ */
+fun computeGradientStops(
     points: List<Point>,
-    colors: List<Int>,
+    pointColors: List<RgbColor>,
 ): List<GradientStop> {
-    // Project all points
     val mercatorPoints = points.map { it.toMercatorPoint() }
-    val pointColors = colors.map { it.toRgb() }
 
-    // Compute distances in projected space
-    val distances = mutableListOf<Double>()
-    var total = 0.0
-    for (i in 1 until mercatorPoints.size) {
-        val dx = mercatorPoints[i].x - mercatorPoints[i - 1].x
-        val dy = mercatorPoints[i].y - mercatorPoints[i - 1].y
-        val d = hypot(dx, dy)
-        distances += d
-        total += d
-    }
+    // Compute distances between each pair of points
+    val segmentLengths = mercatorPoints
+        .zipWithNext { a, b -> hypot(b.x - a.x, b.y - a.y) }
 
-    // Build stops
-    val raw = mutableListOf<Pair<Double, Triple<Double, Double, Double>>>()
-    var acc = 0.0
-    raw += 0.0 to pointColors[0]
-    for (i in 1 until pointColors.size) {
-        acc += distances[i - 1]
-        raw += (acc / total).coerceIn(0.0, 1.0) to pointColors[i]
-    }
+    val totalLength = segmentLengths.sum().takeIf { it > 0 } ?: return emptyList()
 
-    // Deduplicate and sort
-    return raw
-        .map { (p, rgb) -> BigDecimal(p).setScale(6, RoundingMode.HALF_UP).toDouble() to rgb }
-        .distinctBy { it.first }
-        .sortedBy { it.first }
-        .map { (p, rgb) -> GradientStop(p, rgb) }
+    // Compute normalized cumulative distances (stops)
+    val cumulativeDistances = segmentLengths
+        .runningFold(0.0) { acc, d -> acc + d }
+        .map { it / totalLength }
+
+    // Pair stops with colors and round
+    return cumulativeDistances
+        .zip(pointColors) { stop, color ->
+            GradientStop(
+                progress = BigDecimal(stop).setScale(6, RoundingMode.HALF_UP).toDouble(),
+                rgbColor = color
+            )
+        }
+        .distinctBy { it.progress }
 }
 
 private fun projectX(lon: Double): Double = lon / 360.0 + 0.5

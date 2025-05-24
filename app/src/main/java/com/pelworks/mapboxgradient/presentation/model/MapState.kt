@@ -9,5 +9,5 @@ data class MapState(
 
 data class GradientStop(
     val progress: Double,
-    val rgbColor: Triple<Double, Double, Double>,
+    val rgbColor: RgbColor,
 )

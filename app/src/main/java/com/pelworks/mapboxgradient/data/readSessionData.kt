@@ -9,16 +9,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStreamReader
 
-suspend fun readSessionData(application: Application) : List<Location> {
-    return withContext(Dispatchers.IO) {
+suspend fun readSessionData(application: Application): List<Location> =
+    withContext(Dispatchers.IO) {
         val context = application.applicationContext
-        val inputStream = context.resources.openRawResource(R.raw.session_data)
-        val reader = InputStreamReader(inputStream)
-
-        val locationType = object : TypeToken<List<Location>>() {}.type
-        val parsedList: List<Location> = Gson().fromJson(reader, locationType)
-
-        reader.close()
-        parsedList
+        context.resources.openRawResource(R.raw.session_data).use { inputStream ->
+            InputStreamReader(inputStream).use { reader ->
+                val locationType = object : TypeToken<List<Location>>() {}.type
+                Gson().fromJson(reader, locationType)
+            }
+        }
     }
-}

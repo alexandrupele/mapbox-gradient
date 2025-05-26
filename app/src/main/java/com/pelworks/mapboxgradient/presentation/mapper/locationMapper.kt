@@ -3,6 +3,7 @@ package com.pelworks.mapboxgradient.presentation.mapper
 import com.mapbox.geojson.Point
 import com.pelworks.mapboxgradient.domain.model.Location
 import com.pelworks.mapboxgradient.presentation.model.GradientStop
+import com.pelworks.mapboxgradient.presentation.model.Line
 import com.pelworks.mapboxgradient.presentation.model.MapState
 import com.pelworks.mapboxgradient.presentation.model.MercatorPoint
 import com.pelworks.mapboxgradient.presentation.model.RgbColor
@@ -12,15 +13,26 @@ import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.sin
 
+private const val POINTS_IN_SEGMENT = 200
+
 fun List<Location>.toMapState(): MapState {
-    val points = map { Point.fromLngLat(it.lon, it.lat) }
-    return MapState(
-        points = points,
-        gradientStops = computeGradientStops(
-            points = points,
-            pointColors = map { it.toSpeedColor().toRgb() }
-        )
-    )
+    val segments = chunked(POINTS_IN_SEGMENT)
+
+    val segmentLines = segments.map { it.toLine() }
+
+    // Create connecting lines between segment endpoints
+    val connectionLines = segments
+        .zipWithNext()
+        .mapNotNull { (current, next) ->
+            val lastOfCurrent = current.lastOrNull()
+            val firstOfNext = next.firstOrNull()
+            if (lastOfCurrent != null && firstOfNext != null) {
+                val line = listOf(lastOfCurrent, firstOfNext).toLine()
+                if (line.gradientStops.isNotEmpty()) line else null
+            } else null
+        }
+
+    return MapState(lines = segmentLines + connectionLines)
 }
 
 /**
@@ -67,3 +79,17 @@ private fun Point.toMercatorPoint() =
         x = projectX(longitude()),
         y = projectY(latitude())
     )
+
+private fun List<Location>.toLine(): Line {
+    val points = map { Point.fromLngLat(it.lon, it.lat) }
+
+    return Line(
+        points = points,
+        gradientStops = computeGradientStops(
+            points = points,
+            pointColors = map { point ->
+                point.toSpeedColor().toRgb()
+            }
+        )
+    )
+}

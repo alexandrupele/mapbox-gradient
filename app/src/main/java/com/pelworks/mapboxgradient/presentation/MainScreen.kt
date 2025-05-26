@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.mapbox.geojson.Feature
 import com.mapbox.geojson.LineString
-import com.mapbox.geojson.Point
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.compose.MapEffect
@@ -20,12 +19,12 @@ import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
 import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
 import com.mapbox.maps.extension.style.style
 import com.mapbox.maps.plugin.animation.MapAnimationOptions
-import com.pelworks.mapboxgradient.presentation.model.GradientStop
+import com.pelworks.mapboxgradient.presentation.model.Line
 
 @Composable
 fun MainScreen(
     state: MainState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         state.mapState?.let { mapState ->
@@ -35,7 +34,7 @@ fun MainScreen(
                 mapViewportState = rememberMapViewportState {
                     flyTo(
                         cameraOptions {
-                            center(state.mapState.points.first())
+                            center(state.mapState.lines.first().points.first())
                             zoom(15.0)
                         },
                         MapAnimationOptions.mapAnimationOptions { duration(3000) }
@@ -45,8 +44,7 @@ fun MainScreen(
                 MapEffect(Unit) { mapView ->
                     mapView.mapboxMap.loadStyle(
                         createStyle(
-                            points = mapState.points,
-                            gradientStops = mapState.gradientStops
+                            lines = mapState.lines,
                         )
                     )
                 }
@@ -56,42 +54,43 @@ fun MainScreen(
 }
 
 fun createStyle(
-    points: List<Point>,
-    gradientStops: List<GradientStop>,
+    lines: List<Line>,
 ): StyleContract.StyleExtension {
     return style(style = Style.SATELLITE_STREETS) {
-        val sourceId = "session"
-        val lineLayerId = "line"
-        val lineString = LineString.fromLngLats(points)
-        val feature = Feature.fromGeometry(lineString)
+        lines.forEachIndexed { index, line ->
+            val sourceId = "source-segment-$index"
+            val lineLayerId = "line-segment-$index"
+            val lineString = LineString.fromLngLats(line.points)
+            val feature = Feature.fromGeometry(lineString)
 
-        +geoJsonSource(sourceId) {
-            feature(feature)
-            lineMetrics(true)
-        }
+            +geoJsonSource(sourceId) {
+                feature(feature)
+                lineMetrics(true)
+            }
 
-        +lineLayer(layerId = lineLayerId, sourceId = sourceId) {
-            lineCap(LineCap.ROUND)
-            lineJoin(LineJoin.ROUND)
-            lineWidth(3.0)
+            +lineLayer(layerId = lineLayerId, sourceId = sourceId) {
+                lineCap(LineCap.ROUND)
+                lineJoin(LineJoin.ROUND)
+                lineWidth(3.0)
 
-            lineGradient(
-                interpolate {
-                    linear()
-                    lineProgress()
-                    gradientStops
-                        .forEach { (progress, rgb) ->
-                            val (r, g, b) = rgb
-                            stop(progress) {
-                                rgb {
-                                    literal(r)
-                                    literal(g)
-                                    literal(b)
+                lineGradient(
+                    interpolate {
+                        linear()
+                        lineProgress()
+                        line.gradientStops
+                            .forEach { (progress, rgb) ->
+                                val (r, g, b) = rgb
+                                stop(progress) {
+                                    rgb {
+                                        literal(r)
+                                        literal(g)
+                                        literal(b)
+                                    }
                                 }
                             }
-                        }
-                }
-            )
+                    }
+                )
+            }
         }
     }
 }

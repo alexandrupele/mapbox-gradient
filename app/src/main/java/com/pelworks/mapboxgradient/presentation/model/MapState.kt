@@ -3,6 +3,10 @@ package com.pelworks.mapboxgradient.presentation.model
 import com.mapbox.geojson.Point
 
 data class MapState(
+    val lines: List<Line>
+)
+
+data class Line(
     val points: List<Point>,
     val gradientStops: List<GradientStop>,
 )
